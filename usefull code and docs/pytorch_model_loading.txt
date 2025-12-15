@@ -1,0 +1,207 @@
+====================================================
+WHY PYTORCH REQUIRES RECREATING MODEL ARCHITECTURE
+====================================================
+
+QUESTION:
+---------
+Why do we need to recreate the same model architecture?
+Can’t we just load the .pt file and pass input with the same transformation?
+
+SHORT ANSWER:
+-------------
+By default in PyTorch, a `.pt` file usually contains ONLY model weights
+(state_dict), NOT the model architecture or forward logic.
+Therefore, the model architecture must be recreated in code before loading weights.
+
+----------------------------------------------------
+1. WHAT IS ACTUALLY STORED IN A .pt FILE?
+----------------------------------------------------
+
+COMMON PRACTICE (RECOMMENDED):
+------------------------------
+torch.save(model.state_dict(), "model.pt")
+
+This `.pt` file contains:
+- Tensor values (weights & biases)
+- Parameter names (layer1.weight, layer1.bias, etc.)
+
+It does NOT contain:
+- Model class
+- Layer connections
+- Forward pass logic
+
+That is why we must do:
+
+model = MyModel()          # recreate architecture
+model.load_state_dict(torch.load("model.pt"))
+model.eval()
+
+----------------------------------------------------
+2. WHY PYTORCH WORKS THIS WAY
+----------------------------------------------------
+
+PyTorch uses a DYNAMIC COMPUTATION GRAPH (define-by-run):
+
+- Model structure lives in Python code
+- Forward pass is executed dynamically
+- `.pt` only stores tensor data
+
+ADVANTAGES:
+- Flexibility
+- Python control flow (if/for/loops)
+- Easier debugging
+
+TRADE-OFF:
+- Architecture is NOT automatically serialized
+
+----------------------------------------------------
+3. CAN WE LOAD A MODEL WITHOUT RECREATING ARCHITECTURE?
+----------------------------------------------------
+
+YES — but with limitations.
+
+You can save the entire model:
+
+torch.save(model, "full_model.pt")
+
+And load it directly:
+
+model = torch.load("full_model.pt")
+model.eval()
+
+WHY THIS IS NOT RECOMMENDED:
+----------------------------
+- Depends on exact Python class & file structure
+- Breaks if code changes
+- Uses pickle (security risk)
+- Hard to deploy across environments
+
+PyTorch documentation discourages this for production.
+
+----------------------------------------------------
+4. BEST PRACTICE (INDUSTRY / MLOPS STANDARD)
+----------------------------------------------------
+
+Always save:
+- model.state_dict()
+- preprocessing parameters (mean, std, etc.)
+- model configuration (JSON / YAML)
+
+Keep architecture:
+- Defined in code
+- Version controlled (Git)
+
+This ensures:
+- Reproducibility
+- Stability
+- Safe deployment
+- Easy debugging
+
+----------------------------------------------------
+5. WHY TENSORFLOW / KERAS FEELS DIFFERENT
+----------------------------------------------------
+
+Keras saves:
+- Architecture
+- Weights
+- Optimizer state
+
+Example:
+model.save("model.h5")
+model = load_model("model.h5")
+
+Reason:
+- TensorFlow uses a STATIC GRAPH
+- Graph structure is serializable
+
+PyTorch trades this for flexibility.
+
+----------------------------------------------------
+6. CORRECT PYTORCH PRODUCTION PATTERN
+----------------------------------------------------
+
+MODEL DEFINITION:
+-----------------
+class HousePriceModel(nn.Module):
+    ...
+
+CONFIG-DRIVEN INSTANTIATION:
+----------------------------
+config = {
+    "input_dim": 3,
+    "hidden_dim": 16
+}
+
+model = HousePriceModel(**config)
+model.load_state_dict(torch.load("model.pt"))
+model.eval()
+
+This is:
+- Stable
+- Maintainable
+- Production-safe
+
+----------------------------------------------------
+7. HOW TO AVOID RECREATING ARCHITECTURE (ADVANCED)
+----------------------------------------------------
+
+OPTION 1: TORCHSCRIPT (RECOMMENDED)
+----------------------------------
+scripted_model = torch.jit.script(model)
+scripted_model.save("model.pt")
+
+Load:
+model = torch.jit.load("model.pt")
+model.eval()
+
+Benefits:
+- No Python model class needed
+- Safe for production
+- Works in C++ environments
+
+OPTION 2: ONNX
+--------------
+torch.onnx.export(model, dummy_input, "model.onnx")
+
+Used with:
+- ONNX Runtime
+- TensorRT
+- OpenVINO
+
+----------------------------------------------------
+8. INFERENCE REQUIRES MORE THAN MODEL WEIGHTS
+----------------------------------------------------
+
+For correct inference, you MUST reuse:
+- Same preprocessing transforms
+- Same normalization statistics
+- Same feature order
+
+Never:
+- Recompute mean/std on inference data
+- Change transform order
+- Forget model.eval()
+
+----------------------------------------------------
+9. SIMPLE RULE TO REMEMBER
+----------------------------------------------------
+
+Weights ≠ Model
+
+Model = Code + Weights + Preprocessing
+
+----------------------------------------------------
+10. SUMMARY TABLE
+----------------------------------------------------
+
+Question                              Answer
+----------------------------------------------------
+Why recreate architecture?            .pt stores only weights
+Why not save full model?              Fragile & unsafe
+Best PyTorch practice?                state_dict + code
+Production inference?                 TorchScript / ONNX
+MLOps-ready approach?                 Config + artifacts
+
+====================================================
+END OF FILE
+====================================================
